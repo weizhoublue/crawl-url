@@ -1,38 +1,146 @@
-# crawl-url
+# crawl-url CLI 工具使用指南
 
-文档站 URL 递归抓取工具（Go 实现）。由 `../crawUrl/craw_url.py` 重构而来，CLI 与输出语义兼容。
+`crawl-url` 是一个使用 Go 语言实现的高并发文档站 URL 递归抓取工具。它可以从一个指定的“种子 URL”开始，自动并行提取并抓取同一前缀范围内的所有网页及媒体链接，最终将成功抓取的 URL 列表输出到标准输出（`stdout`）。
 
-## 构建
+---
 
+## 1. 构建与运行
+
+### 1.1 构建二进制
+在当前项目根目录下执行以下命令进行编译：
 ```bash
-cd my_dev_tools/crawl-url
 go build -o crawl-url ./cmd/crawl-url
 ```
 
-## 用法
-
+### 1.2 快速运行
 ```bash
-# 递归抓取整个文档站前缀
-./crawl-url https://docs.cilium.io/en/stable/ 2>/dev/null
-
-# 最多 100 个 URL（选项使用 -- 长选项格式）
-./crawl-url https://docs.cilium.io/en/stable/ --url-limit 100 2>/dev/null
-
-# 8 个并发 worker
-./crawl-url https://docs.cilium.io/en/stable/ --workers 8 --url-limit 50 2>/dev/null
-
-# 限制深度：种子=0，depth 2 = 种子 + 一层子链接
-./crawl-url https://clerk.com/docs --depth 2 --url-limit 50
-
-# 帮助
-./crawl-url --help
-
-# 排除前缀、保存 HTML、调试
-./crawl-url https://example.com/docs/ \
-  --exclude-prefix https://example.com/docs/_static/ \
-  --output-dir ./saved-pages \
-  --debug
+./crawl-url https://clerk.com/docs
 ```
 
+---
 
+## 2. 典型应用场景与命令示例
 
+### 场景 1：基础递归抓取（整站扫描）
+* **需求**：获取某个在线文档站点同前缀下的所有页面 URL。
+* **命令**：
+  ```bash
+  ./crawl-url https://docs.cilium.io/en/stable/ > cilium_urls.txt
+  ```
+* **效果**：系统采用默认 6 个并发 Worker，不加深度和数量限制，递归爬取所有 Cilium 在线文档页面，并将所有成功的 URL 导出到 `cilium_urls.txt`。
+
+### 场景 2：快速抽样爬取（限制抓取数量）
+* **需求**：只需要前 50 个网页作为分析样本，且要求尽快返回结果。
+* **命令**：
+  ```bash
+  ./crawl-url https://clerk.com/docs --url-limit 50 --workers 12 > sample_urls.txt
+  ```
+* **效果**：最多只将 50 个 URL 加入队列；同时启动 12 个高并发 Worker 以提速，一旦爬够 50 个页面即刻停止退出。
+
+### 场景 3：抓取大纲/导航页（限制层级深度）
+* **需求**：仅分析文档站的一级导航和直接子链接，不希望深入复杂的底层叶子节点。
+* **命令**：
+  ```bash
+  ./crawl-url https://example.com/docs --depth 2
+  ```
+* **效果**：
+  * 深度 0（`https://example.com/docs`）页面会被抓取并分析。
+  * 深度 1（直接从种子页中解析出的链接，如 `/install`，`/intro`）会被抓取并输出。
+  * 深度 2（从 `/install` 等页面里继续深入的子链接）将完全不被爬取或扩展。
+
+### 场景 4：排除特定子目录（例如旧版本或静态资源）
+* **需求**：抓取最新文档，但希望剔除 `v1` 版本的过时文档，并过滤掉图片静态资源目录。
+* **命令**：
+  ```bash
+  ./crawl-url https://example.com/docs/ \
+    --exclude-prefix https://example.com/docs/v1/ \
+    --exclude-prefix https://example.com/docs/_static/
+  ```
+* **效果**：所有解析出的子链接中，只要是以 `https://example.com/docs/v1/` 或 `https://example.com/docs/_static/` 开头的，都会直接在入队前被拦截过滤。
+
+### 场景 5：完整离线备份（网页+媒体文件+本地保存+调试日志）
+* **需求**：将文档站内的 HTML、图片及视频文件一并下载到本地作为离线参考，并监控爬取过程。
+* **命令**：
+  ```bash
+  ./crawl-url https://example.com/docs/ \
+    --image \
+    --video \
+    --output-dir ./offline_docs \
+    --debug 2> crawl_debug.log
+  ```
+* **效果**：
+  * 不仅递归爬取 HTML，还将页面中包含的 `.png`, `.jpg` 等图片以及 `.mp4`, `.mov` 等视频一同作为任务访问。
+  * 将所有成功请求的网页文件自动根据 URL 映射落地到当前目录下新建的 `./offline_docs` 中。
+  * 开启调试模式，将调试日志和请求失败的警告日志重定向输出至 `crawl_debug.log`，标准输出仅导出成功抓取的地址列表。
+
+---
+
+## 3. 命令行选项说明
+
+> [!IMPORTANT]
+> `crawl-url` CLI 严格要求使用长选项格式（即必须以双减号 `--` 开头，例如 `--workers`），不支持以单减号 `-` 开头的短选项格式（会报错退出）。
+
+| 选项名称 | 参数类型 | 默认值 | 作用与用法描述 |
+| :--- | :--- | :--- | :--- |
+| **`<url>`** | 位置参数 | 无（必填） | 抓取的起点“种子 URL”。它决定了后续抓取的前缀范围。 |
+| **`--url-limit`** | 整数 | 不限制 | 限制整个爬取生命周期中最大入队的 URL 总数（包含种子本身）。达到上限后，新发现的 URL 将直接被忽略。 |
+| **`--depth`** | 整数 | 不限制 | 最大抓取层数限制（种子 URL 深度为 0）。例如：<br>- `--depth 1`：仅抓取种子页面本身。<br>- `--depth 2`：抓取种子页面及种子页面上的直接子链接（深度 0 和 1 的页面）。 |
+| **`--exclude-prefix`** | 字符串 | 无 | 排除指定的 URL 前缀。可多次指定该参数以排除多个前缀。任何匹配该前缀的链接都将被忽略。 |
+| **`--workers`** | 整数 | `6` | 并发执行抓取的 Worker 协程数量（必须 $\ge 1$）。 |
+| **`--per-timeout`** | 浮点数/秒 | `10.0` | 单次 HTTP 请求的超时时间（单位：秒）。 |
+| **`--image`** | 无参数 | 关 | 开启抓取同前缀的图片资源链接（检测 `src` 或 `poster` 属性，且文件后缀匹配常见图片格式）。 |
+| **`--video`** / **`--vedio`** | 无参数 | 关 | 开启抓取同前缀的视频资源链接。`--vedio` 为兼容旧拼写的别名参数。 |
+| **`--output-dir`** | 字符串 | 无 | 指定本地目录路径，若设置，所有成功抓取的 HTML 页面内容都会被保存到该目录下。 |
+| **`--debug`** | 无参数 | 关 | 开启调试日志，调试详情将被实时输出到标准错误（`stderr`），不影响标准输出。 |
+| **`--help`** / **`-h`** | 无参数 | - | 显示 CLI 的帮助信息并退出。 |
+
+---
+
+## 4. 抓取行为与底层原理
+
+`crawl-url` 内部基于 Go 并发模型与流水线任务机制实现，其核心抓取逻辑如下：
+
+### 3.1 种子与前缀锁定 (Prefix Scope)
+工具启动时会根据种子 URL 自动提取其**前缀范围**。例如：
+* 种子为 `https://example.com/docs/` -> 范围前缀为 `https://example.com/docs/`。
+* 在递归解析 HTML 页面提取子链接时，只有**同域名且以该范围前缀开头**的 URL 才会加入待抓取队列。
+* 任何外站链接或父级目录（如 `https://example.com/blog/`）都会在入队前被自动过滤。
+* 如果遇到 HTTP 重定向，重定向后的最终 URL 同样必须在此前缀范围内，否则该任务会被丢弃。
+
+### 3.2 任务调度与并发控制
+1. **状态去重**：维护全局安全的 `known` Set 对所有已入队 URL 去重，防止重复访问。
+2. **Worker 协程池**：启动指定数量（默认为 `6`）的并发 Worker，共同消费缓冲 Channel 中的任务。
+3. **优雅停机**：使用 `sync.WaitGroup` 追踪当前活跃的任务数。当队列中没有新任务且所有 Worker 均处于空闲状态时，主协程自动唤醒，关闭队列并安全退出。
+
+### 3.3 深度判定 (Depth Management)
+* 种子 URL 被赋予 `Depth = 0`。
+* 页面 $P$ 中的所有子链接一旦加入队列，其深度值均设定为 `Depth(P) + 1`。
+* **扩展链接截断**：如果设定了 `--depth N`，当 Worker 抓取到一个深度为 $d$ 的页面时：
+  * 若 $d < N - 1$，Worker 会在抓取后解析并将其中的子链接加入队列。
+  * 若 $d = N - 1$（达到最深层级限制），Worker 依然会完成对当前页面的 HTTP 请求、输出其 URL 到 `stdout` 并将其保存（若配置了 `--output-dir`），但**绝不会再从该页面中解析并扩展子链接**。
+
+### 3.4 媒体资源处理
+* 当开启 `--image` 或 `--video` 时，解析器会从 HTML 标签的 `src` 或 `poster` 属性中提取后缀名匹配常见媒体格式（如 `.png`, `.mp4` 等）的资源链接。
+* 媒体任务的类型为 `Media`。由于媒体文件不包含子链接，它们在被 HTTP 访问并验证成功（返回 2xx）后，直接输出其 URL，不会触发 HTML 解析。
+
+### 3.5 HTML 本地持久化命名规则
+当配置了 `--output-dir` 时，系统会为每个网页 URL 生成唯一的存储路径以防止多层级文件名冲突或非法字符导致存储失败。生成规则如下：
+1. 提取 URL 主机名作为一级子目录。
+2. 提取 URL Path 中的各级路径作为子目录。如果是以 `/` 结尾，则文件名以 `index` 开头。
+3. 计算完整 URL 的 SHA256 哈希值，取前 12 位字符作为唯一指纹，拼接在文件名后缀前。
+4. 文件名命名格式：`<文件名>__<12位哈希值>.html`。
+
+### 3.6 故障容错
+为了保证在大规模文档站抓取时的强健性，单次请求网络中断、响应超时、服务器返回 `404` 或 `500` 等错误均不会导致 CLI 进程崩溃。错误详情会被打印到 `stderr` 供调试排查，CLI 会继续处理其他剩余的就绪任务。
+
+---
+
+## 5. 运行测试
+
+本工程包含了完备的单体测试与端到端 (E2E) 集成测试：
+
+```bash
+# 运行全部单体测试与集成测试
+go test -v ./...
+```
+详细的测试设计与用例拓扑结构，请参阅 [tests/README.md](file:///Users/weizhoublue/Documents/git/crawl-url/tests/README.md)。
