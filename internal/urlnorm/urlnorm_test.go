@@ -48,3 +48,31 @@ func TestHasExtension(t *testing.T) {
 		t.Fatal("expected image extension")
 	}
 }
+
+func TestHasExtensionText(t *testing.T) {
+	cases := []struct {
+		url  string
+		want bool
+	}{
+		{"https://x.com/README.md", true},
+		{"https://x.com/README.MD", true}, // case-insensitive
+		{"https://x.com/config.yaml", true},
+		{"https://x.com/config.yml", true},
+		{"https://x.com/data.json", true},
+		{"https://x.com/data.xml", true},
+		{"https://x.com/notes.txt", true},
+		{"https://x.com/index.mdx", true},
+		{"https://x.com/report.csv", true},
+		{"https://x.com/docs.rst", true},
+		{"https://x.com/pyproject.toml", true},
+		{"https://x.com/page.html", false},
+		{"https://x.com/image.png", false},
+		{"https://x.com/video.mp4", false},
+	}
+	for _, tc := range cases {
+		got := HasExtension(tc.url, TextExtensions)
+		if got != tc.want {
+			t.Errorf("HasExtension(%q, TextExtensions) = %v, want %v", tc.url, got, tc.want)
+		}
+	}
+}
