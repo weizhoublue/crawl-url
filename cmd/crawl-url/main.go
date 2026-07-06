@@ -13,6 +13,10 @@ func main() {
 		printUsage()
 		os.Exit(0)
 	}
+	if err == errVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n\n", err)
 		printUsage()

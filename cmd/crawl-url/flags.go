@@ -10,6 +10,9 @@ import (
 )
 
 var errHelp = fmt.Errorf("help")
+var errVersion = fmt.Errorf("version")
+
+const version = "v0.2.0"
 
 type cliOptions struct {
 	seed string
@@ -20,6 +23,9 @@ func parseCLI(args []string) (cliOptions, error) {
 	for _, arg := range args {
 		if arg == "--help" || arg == "-h" {
 			return cliOptions{}, errHelp
+		}
+		if arg == "--version" || arg == "-v" {
+			return cliOptions{}, errVersion
 		}
 	}
 
@@ -115,6 +121,11 @@ func parseCLI(args []string) (cliOptions, error) {
 				return cliOptions{}, fmt.Errorf("选项 --debug 不接受参数")
 			}
 			opts.cfg.Debug = true
+		case "txt":
+			if hasValue {
+				return cliOptions{}, fmt.Errorf("选项 --txt 不接受参数")
+			}
+			opts.cfg.Txt = true
 		case "output-dir":
 			if !hasValue {
 				return cliOptions{}, fmt.Errorf("选项 --output-dir 需要参数")
@@ -168,10 +179,12 @@ func printUsage() {
 	fmt.Fprintf(w, "  --image                   抓取同前缀图片 URL\n")
 	fmt.Fprintf(w, "  --video                   抓取同前缀视频 URL\n")
 	fmt.Fprintf(w, "  --vedio                   --video 的兼容别名\n")
+	fmt.Fprintf(w, "  --txt                     抓取同前缀文本文件 URL（.md .txt .yaml .yml .json 等）\n")
 	fmt.Fprintf(w, "  --per-timeout <秒>        单请求超时（默认 10）\n")
 	fmt.Fprintf(w, "  --workers <n>             并发 worker 数（默认 6）\n")
 	fmt.Fprintf(w, "  --debug                   调试日志到 stderr\n")
 	fmt.Fprintf(w, "  --output-dir <目录>       保存 HTML 页面\n")
+	fmt.Fprintf(w, "  --version, -v             打印版本号\n")
 	fmt.Fprintf(w, "  --help, -h                显示此帮助\n")
 	fmt.Fprintf(w, "\n示例:\n")
 	fmt.Fprintf(w, "  crawl-url https://clerk.com/docs --url-limit 20 --workers 8\n")
