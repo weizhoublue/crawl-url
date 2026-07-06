@@ -173,8 +173,55 @@ func TestCrawlHTTPEndToEnd(t *testing.T) {
 	if !strings.Contains(out, "/page2") {
 		t.Fatalf("missing page2: %s", out)
 	}
+}
+
+func TestCrawlHTTPEndToEndTxtOn(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/data.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	})
+	mux.HandleFunc("/page2", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("<html><body>leaf</body></html>"))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		body := `<html><body>
+<a href="/page2">p2</a>
+<a href="/data.json">json</a>
+</body></html>`
+		_, _ = w.Write([]byte(body))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	limit := 10
+	var stdout strings.Builder
+	old := printURL
+	printURL = func(url string) { stdout.WriteString(url + "\n") }
+	defer func() { printURL = old }()
+
+	err := Crawl(srv.URL+"/", Config{
+		Prefix:     srv.URL + "/",
+		URLLimit:   &limit,
+		Workers:    2,
+		PerTimeout: 5,
+		Txt:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "/page2") {
+		t.Fatalf("missing page2: %s", out)
+	}
 	if !strings.Contains(out, "/data.json") {
-		t.Fatalf("missing json: %s", out)
+		t.Fatalf("--txt on: missing data.json: %s", out)
 	}
 }
 
