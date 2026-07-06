@@ -13,6 +13,10 @@ var (
 	VideoExtensions = extSet(
 		".avi", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".ogv", ".webm",
 	)
+	TextExtensions = extSet(
+		".md", ".mdx", ".txt", ".yaml", ".yml",
+		".json", ".xml", ".csv", ".rst", ".toml",
+	)
 )
 
 func extSet(exts ...string) map[string]struct{} {
