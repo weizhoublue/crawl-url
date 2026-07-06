@@ -40,6 +40,7 @@ type Config struct {
 	MaxDepth        *int // nil = unlimited; N allows depths 0..N-1
 	Image           bool
 	Video           bool
+	Txt             bool
 	PerTimeout      float64
 	ExcludePrefixes []string
 	Debug           bool
@@ -155,6 +156,12 @@ func (s *State) handleDiscovered(candidate string, crawlPage bool, parentDepth i
 	}
 	if urlnorm.HasExtension(candidate, urlnorm.VideoExtensions) {
 		if s.cfg.Video {
+			s.Reserve(candidate, Media, childDepth)
+		}
+		return
+	}
+	if urlnorm.HasExtension(candidate, urlnorm.TextExtensions) {
+		if s.cfg.Txt {
 			s.Reserve(candidate, Media, childDepth)
 		}
 		return

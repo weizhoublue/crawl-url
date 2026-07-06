@@ -177,3 +177,48 @@ func TestCrawlHTTPEndToEnd(t *testing.T) {
 		t.Fatalf("missing json: %s", out)
 	}
 }
+
+func TestHandleDiscoveredTxtOff(t *testing.T) {
+	cfg := Config{Prefix: "https://example.com/", Workers: 1}
+	s := newState(cfg)
+	// drain tasks so channel never blocks (buffer=4096, but be safe)
+	go func() {
+		for range s.tasks {
+			s.wg.Done()
+		}
+	}()
+
+	s.handleDiscovered("https://example.com/README.md", true, 0)
+	s.handleDiscovered("https://example.com/config.yaml", true, 0)
+	s.handleDiscovered("https://example.com/data.json", true, 0)
+
+	s.mu.Lock()
+	count := s.acceptedCount
+	s.mu.Unlock()
+
+	if count != 0 {
+		t.Fatalf("--txt off: expected 0 accepted, got %d", count)
+	}
+}
+
+func TestHandleDiscoveredTxtOn(t *testing.T) {
+	cfg := Config{Prefix: "https://example.com/", Txt: true, Workers: 1}
+	s := newState(cfg)
+	go func() {
+		for range s.tasks {
+			s.wg.Done()
+		}
+	}()
+
+	s.handleDiscovered("https://example.com/README.md", true, 0)
+	s.handleDiscovered("https://example.com/config.yaml", true, 0)
+	s.handleDiscovered("https://example.com/data.json", true, 0)
+
+	s.mu.Lock()
+	count := s.acceptedCount
+	s.mu.Unlock()
+
+	if count != 3 {
+		t.Fatalf("--txt on: expected 3 accepted, got %d", count)
+	}
+}
